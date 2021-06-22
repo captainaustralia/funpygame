@@ -20,12 +20,14 @@ def create_pipe():
     # Функция возвращает 2 значения
     return bottom_pipe, top_pipe
 
+
 # Функция для движения труб, передается список труб, и координата х каждого из них изменяется на -5, возвращается массив
 # содержащая координаты
 def move_pipes(pipes):
     for pipe in pipes:
         pipe.centerx -= 5
     return pipes
+
 
 # отрисовывает трубы
 def draw_pipes(pipes):
@@ -36,6 +38,7 @@ def draw_pipes(pipes):
             flip_pipe = pygame.transform.flip(pipe_surface, False, True)
             screen.blit(flip_pipe, pipe)
 
+
 # проверка коллизий, коллизия - столкновение, т.е проверяем:
 # 1) Сталкивается ли наша птица с трубой
 # 2) Выходит ли наша птица за границы, т.е сталкивается ли с границами
@@ -43,6 +46,7 @@ def check_collision(pipes):
     for pipe in pipes:
         if bird_rect.colliderect(pipe):
             print('gg')
+            death_sound.play()
             return False
         elif bird_rect.centery >= 1024 or bird_rect.centery <= 0:
             return False
@@ -50,13 +54,45 @@ def check_collision(pipes):
     return True
 
 
+# bird movement
+def rotate_bird(bird):
+    new_bird = pygame.transform.rotozoom(bird, -bird_movement * 3, 1)
+    return new_bird
+
+
+def bird_animation():
+    new_bird = bird_frames[bird_index]
+    new_bird_rect = new_bird.get_rect(center=(100, bird_rect.centery))
+    return new_bird, new_bird_rect
+
+
 # def check_out():
 #     if bird_rect.centery >= 1024 or bird_rect.centery <= 0:
 #         return False
 #     return True
 #     # print("OUT")
+# RGB RED GREEN BLUE
+def score_display(game_state):
+    if game_state == 'main_game':
+        score_surface = game_font.render(str(int(score)), True, (255, 255, 255))
+        score_rect = score_surface.get_rect(center=(288, 100))
+        screen.blit(score_surface, score_rect)
+    if game_state == 'game_over':
+        score_surface = game_font.render(f'Score: {int(score)}', True, (255, 255, 255))
+        score_rect = score_surface.get_rect(center=(288, 100))
+        screen.blit(score_surface, score_rect)
+
+        high_score_surface = game_font.render(f'High Score: {int(score)}', True, (255, 255, 255))
+        high_score_rect = score_surface.get_rect(center=(288, 850))
+        screen.blit(high_score_surface, high_score_rect)
 
 
+def update_score(score, high_score):
+    if score > high_score:
+        high_score = score
+    return high_score
+
+#pygame.mixer.pre_init(frequency=44100,size=16,channels=1,buffer=512)
 pygame.init()
 # Здесь стартует наша игра, с помощью данного метода .init( ) , мы говорим , что с этого момента мы будем
 # инициализировать наш код, который будет находиться ниже
@@ -73,10 +109,14 @@ screen = pygame.display.set_mode((576, 1024))
 # для того, чтобы изображение было плавным, иными словами установим FPS -
 clock = pygame.time.Clock()
 
+game_font = pygame.font.Font('04B_19.TTF', 40)
+
 # Игровая механика
-gravity = 0.25
+gravity = 0.5
 bird_movement = 0
 game_active = True
+score = 0
+high_score = 0
 # В переменной background_surface мы сохраняем изображение нашего фона по заданному пути
 # Уточню, в данной строчке мы не помещаем нашу картинку в фон, а просто сохраняем ее в переменную
 # метод .convert() нужен для того, чтобы ускорить запуск нашей игры, он немного конвертирует картинку
@@ -96,10 +136,22 @@ floor_surface = pygame.transform.scale2x(floor_surface)
 # мы и имитируем движение. Координата Y - останется неизменной, а вот Х будет меняться
 floor_x_pos = 0
 
-# Сохраним изображение птицы в переменную , в следующей строке увеличим изображение в 2 раза
-bird_surface = pygame.image.load('sprites/bluebird-midflap.png').convert()
-bird_surface = pygame.transform.scale2x(bird_surface)
+bird_downflap = pygame.transform.scale2x(pygame.image.load('sprites/bluebird-downflap.png').convert_alpha())
+bird_midflap = pygame.transform.scale2x(pygame.image.load('sprites/bluebird-midflap.png').convert_alpha())
+bird_upflap = pygame.transform.scale2x(pygame.image.load('sprites/bluebird-upflap.png').convert_alpha())
+bird_frames = [bird_downflap, bird_midflap, bird_upflap]
+bird_index = 0
+bird_surface = bird_frames[bird_index]
 bird_rect = bird_surface.get_rect(center=(100, 512))
+
+BIRDFLAP = pygame.USEREVENT + 1
+# Меняем положение крыльев каждые 200 миллисек
+pygame.time.set_timer(BIRDFLAP, 200)
+###convert alpha - убирает черный квадрат
+# Сохраним изображение птицы в переменную , в следующей строке увеличим изображение в 2 раза
+# bird_surface = pygame.image.load('sprites/bluebird-midflap.png').convert_alpha()
+# bird_surface = pygame.transform.scale2x(bird_surface)
+# bird_rect = bird_surface.get_rect(center=(100, 512))
 
 pipe_surface = pygame.image.load('sprites/pipe-green.png').convert()
 pipe_surface = pygame.transform.scale2x(pipe_surface)
@@ -108,6 +160,13 @@ SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE, 1200)
 pipe_height = [444, 600, 800]
 
+game_over_surface = pygame.transform.scale2x(pygame.image.load('sprites/message.png').convert_alpha())
+game_over_rect = game_over_surface.get_rect(center=(288, 512))
+
+flap_sound = pygame.mixer.Sound('audio/wing.wav')
+death_sound = pygame.mixer.Sound('audio/hit.wav')
+score_sound = pygame.mixer.Sound('audio/point.wav')
+score_sound_countdown = 100
 # Так как игра подразумевает, что у вас постоянно , что-то изменяется на экране, например бегает или прыгает персонаж
 # бегают мобы и.тд , это значит, что постоянно изменяется картинка, происходят какие-то действия, но помимо этого
 # вы и сами можете двигать курсор мыши, например , чтобы нажать на крестик и закрыть игру. Так вот, так как
@@ -134,10 +193,12 @@ while True:
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE and game_active:
-                # print("flap")
+                # print(num)
                 bird_movement = 0
                 bird_movement -= 12
+                flap_sound.play()
             if event.key == pygame.K_SPACE and game_active == False:
+                score = 0
                 game_active = True
                 pipe_list.clear()
                 bird_rect.center = (100, 512)
@@ -145,6 +206,12 @@ while True:
         if event.type == SPAWNPIPE:
             # pipe_list.append(create_pipe())
             pipe_list.extend(create_pipe())
+        if event.type == BIRDFLAP:
+            if bird_index < 2:
+                bird_index += 1
+            else:
+                bird_index = 0
+            bird_surface, bird_rect = bird_animation()
     # А вот тут мы как раз таки, помещаем наш фон на экране в точке x = 0 , y = 0, только в отличии от математики
     # х и у он считает от левого верхнего угла, если х находится там же, то у инвертирован( т.е все наоборот)
 
@@ -153,13 +220,24 @@ while True:
     if game_active:
         # BIRD
         bird_movement += gravity
+        rotated_bird = rotate_bird(bird_surface)
         bird_rect.centery += bird_movement
-        screen.blit(bird_surface, bird_rect)
+        screen.blit(rotated_bird, bird_rect)
         game_active = check_collision(pipe_list)
 
         # PIPES
         pipe_list = move_pipes(pipe_list)
         draw_pipes(pipe_list)
+        score += 0.01
+        score_display('main_game')
+        score_sound_countdown -= 1
+        if score_sound_countdown <= 0:
+            score_sound.play()
+            score_sound_countdown = 150
+    else:
+        screen.blit(game_over_surface,game_over_rect)
+        high_score = update_score(score, high_score)
+        score_display('game_over')
 
     # FLOOR
     # Изменяем координату х на - 1 , чтобы она двигалась влево
